@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf-8
 
 import praw
 import argparse
-import urllib
+import urllib.request
 import os
 from imguralbum import *
 import re
@@ -26,27 +26,35 @@ def get_urls(generator, args):
     for thing in generator:
         if is_valid(thing) and thing.url not in urls:
             urls.append(thing.url)
+            if re.match(r".*album.*",thing.title):
+                if len(thing.comments) > 0:
+                    u = re.findall('((https?\:\/\/)?(?:www\.)?(?:m\.)?imgur\.com\/a\/\w+)',thing.comments[0].body)
+                    if len(u) > 0:
+                        if len(u[0]) > 0:
+                            urls.append(u[0][0])
     return urls
 
 def download_images(url, args):
     # Check if it's an album
     try:
         downloader = ImgurAlbumDownloader(url)
+        id = re.findall(r"\/a\/(\w+)",url)
 
-        if downloader.num_images() > args.length:
+        if downloader.num_images > args.length:
             return
 
         if not args.quiet:
             def image_progress(index, image_url, dest):
-                print "Downloading image {} of {} from album {} to {}".format(index, downloader.num_images(), url, dest)
+                print('Downloading image {} of {} from album {} to {}'.format(index, downloader.num_images, url, dest))
 
             downloader.on_image_download(image_progress)
-        downloader.save_images(args.output)
+        print("album {}".format(url))
+        downloader.save_images(args.output + "/" + id[0])
     except ImgurAlbumException as e:
         # Not an album, unfortunately.
         # or some strange error happened.
         if not e.msg.startswith("URL"):
-            print e.msg
+            print(e.msg)
             return
 
         # Check if it's a silly url.
@@ -57,9 +65,9 @@ def download_images(url, args):
             # we don't know the extension
             # so we have to rip it from the url
             # by reading the HTML, unfortunately.
-            response = urllib.urlopen(url)
+            response = urllib.request.urlopen(url)
             if response.getcode() != 200:
-                print "Image download failed: HTML response code {}".format(response.getcode())
+                print("Image download failed: HTML response code {}".format(response.getcode()))
                 return
 
             html = response.read()
@@ -73,7 +81,7 @@ def download_images(url, args):
 
 
         if not image_url:
-            print "Image url {} could not be properly parsed.".format(url, image)
+            print("Image url {} could not be properly parsed.".format(url, image))
             return
 
         if not os.path.exists(args.output):
@@ -82,9 +90,9 @@ def download_images(url, args):
         p = os.path.join(args.output, image.group(2))
 
         if not args.quiet:
-            print "Downloading image {} to {}".format(image_url, p)
+            print("Downloading image {} to {}".format(image_url, p))
 
-        urllib.urlretrieve(image_url, p)
+        urllib.request.urlretrieve(image_url, p)
 
 
 
@@ -99,8 +107,9 @@ def redditor_retrieve(r, args):
         download_images(link, args)
 
 def subreddit_retrieve(r, args):
-    sub = r.get_subreddit(args.subreddit)
-    method = getattr(sub, "get_{}".format(args.sort))
+    sub = r.subreddit(args.subreddit)
+    method = getattr(sub, "{}".format(args.sort))
+    #method = getattr(sub, "get_{}".format(args.sort))
     gen = method(limit=args.limit)
     links = get_urls(gen, args)
     for link in links:
@@ -123,7 +132,7 @@ def post_retrieve(r, args):
     if(is_valid(submission)):
         download_images(submission.url, args)
     else:
-        print "Invalid URL given: {}".format(submission.url)
+        print("Invalid URL given: {}".format(submission.url))
 
 
 if __name__ == "__main__":
